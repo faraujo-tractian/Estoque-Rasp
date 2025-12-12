@@ -1,0 +1,28 @@
+# FastAPI and Web Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Google Sheets Integration
+gspread>=6.0.0
+google-auth>=2.27.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+
+# Slack Integration
+slack-sdk>=3.26.2
+
+# Database
+aiosqlite>=0.19.0
+
+# Configuration
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.1
+
+# Utilities
+python-dateutil>=2.8.2
+
+# Scheduling (for auto-sync)
+apscheduler>=3.10.4
+

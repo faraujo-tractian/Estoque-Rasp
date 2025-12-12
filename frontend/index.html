@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Controle de Estoque - 5S</title>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/css/reset.css">
+    <link rel="stylesheet" href="/static/css/variables.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="overlay hidden">
+        <div class="spinner"></div>
+        <p>Carregando...</p>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <span class="logo-icon">📦</span>
+                <span class="logo-text">Estoque 5S</span>
+            </div>
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <span>☰</span>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item" data-page="home">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-text">Início</span>
+            </a>
+            <a href="#" class="nav-item" data-page="dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Dashboard</span>
+            </a>
+            <a href="#" class="nav-item" data-page="items">
+                <span class="nav-icon">📦</span>
+                <span class="nav-text">Gerenciar Itens</span>
+            </a>
+            <a href="#" class="nav-item" data-page="reports">
+                <span class="nav-icon">📈</span>
+                <span class="nav-text">Relatórios</span>
+            </a>
+            <a href="#" class="nav-item" data-page="history">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">Histórico</span>
+            </a>
+            <a href="#" class="nav-item" data-page="settings">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-text">Configurações</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-status">
+                <span id="syncStatus" class="status-indicator status-online">●</span>
+                <span id="syncText" class="status-text">Online</span>
+            </div>
+            <div class="sidebar-version">v1.0.0</div>
+        </div>
+    </aside>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <button class="mobile-menu-toggle" id="mobileMenuToggle">☰</button>
+            <h1>Retirada/Devolução</h1>
+            <div class="header-actions">
+                <button class="btn-icon" id="btnRefresh" title="Atualizar">
+                    🔄
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- User Input Section -->
+            <section class="card user-section">
+                <label for="userName" class="label">
+                    <span class="label-icon">👤</span>
+                    Seu Nome
+                </label>
+                <input 
+                    type="text" 
+                    id="userName" 
+                    class="input-field input-large" 
+                    placeholder="Digite seu nome completo"
+                    autocomplete="name"
+                >
+            </section>
+
+            <!-- Search Section -->
+            <section class="card search-section">
+                <label for="itemSearch" class="label">
+                    <span class="label-icon">🔍</span>
+                    Buscar Item
+                </label>
+                <div class="search-wrapper">
+                    <input 
+                        type="text" 
+                        id="itemSearch" 
+                        class="input-field input-large" 
+                        placeholder="Digite o nome do item..."
+                    >
+                    <div id="searchResults" class="search-results hidden"></div>
+                </div>
+            </section>
+
+            <!-- Selected Item Section -->
+            <section id="selectedItemSection" class="card item-section hidden">
+                <h2 class="section-title">📦 Item Selecionado</h2>
+                <div id="selectedItemCard" class="selected-item-card">
+                    <!-- Will be populated by JS -->
+                </div>
+                
+                <div class="quantity-section">
+                    <label for="quantity" class="label">
+                        <span class="label-icon">🔢</span>
+                        Quantidade
+                    </label>
+                    <div class="quantity-controls">
+                        <button class="btn-quantity btn-decrease" id="btnDecrease">-</button>
+                        <input 
+                            type="number" 
+                            id="quantity" 
+                            class="input-field input-quantity" 
+                            value="1" 
+                            min="1"
+                        >
+                        <button class="btn-quantity btn-increase" id="btnIncrease">+</button>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="action-buttons">
+                    <button id="btnRetirar" class="btn btn-primary btn-retirar">
+                        🔴 RETIRAR
+                    </button>
+                    <button id="btnDevolver" class="btn btn-primary btn-devolver">
+                        🟢 DEVOLVER
+                    </button>
+                </div>
+            </section>
+
+            <!-- Quick Stats -->
+            <section class="card stats-card hidden" id="quickStats">
+                <h3 class="stats-title">Estatísticas Rápidas</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="statTotalItems">-</div>
+                        <div class="stat-label">Total de Itens</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statLowStock">-</div>
+                        <div class="stat-label">Estoque Baixo</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statToday">-</div>
+                        <div class="stat-label">Movimentações Hoje</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Sistema 5S - Qualidade Operacional</p>
+        </footer>
+    </div>
+
+    <!-- Modal for History -->
+    <div id="modalHistorico" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📋 Histórico de Movimentações</h2>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Will be populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Toast -->
+    <div id="toast" class="toast hidden">
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/config.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/components/searchBar.js"></script>
+    <script src="/static/js/components/itemCard.js"></script>
+    <script src="/static/js/components/modal.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+
