@@ -938,15 +938,7 @@ body {
 /* Responsive Design
    ========================================================================== */
 
-@media (max-width: 1024px) {
-    .split-layout {
-        grid-template-columns: 1fr;
-    }
-    
-    .inventory-panel {
-        height: 400px;
-    }
-}
+/* Removido - queremos manter 2 colunas em 1024px */
 
 @media (max-width: 768px) {
     .sidebar {
@@ -998,18 +990,16 @@ body {
         padding: 1rem;
     }
     
-    /* Split layout vira layout vertical */
+    /* MANTÉM layout de 2 colunas (split-layout) */
     .split-layout {
-        display: flex;
-        flex-direction: column;
         height: calc(100vh - 56px - 2rem);
         gap: 1rem;
     }
     
-    /* Panel de inventário mais compacto */
+    /* Panel de inventário ajustado para tela pequena */
     .inventory-panel {
-        height: 280px;
-        min-height: 280px;
+        height: 100%;
+        min-height: 400px;
     }
     
     .panel-header {
