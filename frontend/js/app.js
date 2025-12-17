@@ -25,8 +25,29 @@ const App = {
 
         // Check connection
         await this.checkConnection();
+        
+        // Initialize virtual keyboard support
+        this.initVirtualKeyboard();
 
         console.log('Aplicacao iniciada com sucesso!');
+    },
+    
+    /**
+     * Initialize virtual keyboard for touch screens
+     */
+    initVirtualKeyboard() {
+        // Listen for focus on all input fields
+        document.addEventListener('focusin', (e) => {
+            if (e.target.matches('input, textarea')) {
+                // Show virtual keyboard (if using onboard or matchbox-keyboard)
+                // The keyboard should auto-show on Raspberry Pi touch screens
+                
+                // Scroll element into view for better UX
+                setTimeout(() => {
+                    e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            }
+        });
     },
 
     /**
