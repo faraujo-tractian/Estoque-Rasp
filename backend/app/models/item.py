@@ -12,9 +12,13 @@ class Item(BaseModel):
     id: Optional[int] = None
     nome: str
     categoria: Optional[str] = None
-    quantidade_disponivel: int
-    estoque_minimo: int = 0
     localizacao: Optional[str] = None
+    quantidade_total: int = 0
+    quantidade_disponivel: int = 0
+    quantidade_em_uso: int = 0
+    estoque_minimo: int = 0
+    codigos_originais: Optional[str] = None
+    aba_origem: Optional[str] = None
     
     class Config:
         from_attributes = True

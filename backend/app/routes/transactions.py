@@ -27,7 +27,7 @@ async def create_transaction(transaction_data: TransactionCreate):
         if not item:
             raise HTTPException(status_code=404, detail="Item não encontrado")
         
-        # Calculate new quantity
+        # Calculate new quantities
         if transaction_data.tipo == "retirada":
             # Check if there's enough stock
             if item['quantidade_disponivel'] < transaction_data.quantidade:
@@ -35,9 +35,19 @@ async def create_transaction(transaction_data: TransactionCreate):
                     status_code=400,
                     detail=f"Estoque insuficiente! Disponível: {item['quantidade_disponivel']} unidades"
                 )
-            new_quantity = item['quantidade_disponivel'] - transaction_data.quantidade
+            new_disponivel = item['quantidade_disponivel'] - transaction_data.quantidade
+            new_em_uso = item['quantidade_em_uso'] + transaction_data.quantidade
         else:  # devolucao
-            new_quantity = item['quantidade_disponivel'] + transaction_data.quantidade
+            # Check if there are items in use to return
+            if item['quantidade_em_uso'] < transaction_data.quantidade:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Quantidade inválida! Apenas {item['quantidade_em_uso']} unidades em uso"
+                )
+            new_disponivel = item['quantidade_disponivel'] + transaction_data.quantidade
+            new_em_uso = item['quantidade_em_uso'] - transaction_data.quantidade
+        
+        new_quantity = new_disponivel  # Para compatibilidade com código existente
         
         # Create transaction record
         transaction = Transaction(
@@ -52,8 +62,29 @@ async def create_transaction(transaction_data: TransactionCreate):
         
         transaction_id = db.create_transaction(transaction)
         
-        # Update item quantity in database
-        db.update_item_quantity(transaction_data.item_id, new_quantity)
+        # Update item quantities in database
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE items 
+            SET quantidade_disponivel = ?,
+                quantidade_em_uso = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (new_disponivel, new_em_uso, transaction_data.item_id))
+        conn.commit()
+        conn.close()
+        
+        # Registrar em items_em_uso (opcional - apenas track de códigos)
+        if transaction_data.tipo == "retirada":
+            # Pegar códigos disponíveis
+            codigos = item.get('codigos_originais', '').split(',')
+            for i in range(transaction_data.quantidade):
+                if i < len(codigos):
+                    db.add_item_em_uso(transaction_data.item_id, codigos[i], transaction_data.nome_pessoa)
+        else:
+            # Remover de items_em_uso
+            db.remove_item_em_uso(transaction_data.item_id, transaction_data.nome_pessoa, transaction_data.quantidade)
         
         # Try to get Slack user ID from Google Sheets mapping
         user_slack_id = None
@@ -109,7 +140,7 @@ async def create_transaction(transaction_data: TransactionCreate):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Erro ao processar transação: {e}")
+        print(f"Erro ao processar transacao: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -129,6 +160,26 @@ async def get_item_history(item_id: int, limit: int = Query(20, ge=1, le=100)):
     try:
         transactions = db.get_transactions_by_item(item_id, limit)
         return transactions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/items-em-uso")
+async def get_items_em_uso():
+    """Get all items currently in use"""
+    try:
+        items = db.get_items_em_uso()
+        return items
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/items-em-uso/item/{item_id}")
+async def get_item_em_uso(item_id: int):
+    """Get items in use for a specific item"""
+    try:
+        items = db.get_items_em_uso_by_item(item_id)
+        return items
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

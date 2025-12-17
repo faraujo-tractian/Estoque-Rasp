@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     
     # Slack
     SLACK_BOT_TOKEN: str = Field(default="")
-    SLACK_CHANNEL: str = Field(default="#estoque")
-    SLACK_SUPERVISOR_ID: Optional[str] = Field(default=None)
+    SLACK_CHANNEL: str = Field(default="C09DV1KQS4C")
+    SLACK_ENABLED: bool = Field(default=True)
     
     # Sync Settings
     SYNC_INTERVAL_MINUTES: int = 5

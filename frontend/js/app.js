@@ -2,6 +2,7 @@
 const App = {
     syncInterval: null,
     currentPage: 'home',
+    isLoggedIn: false,
 
     /**
      * Initialize the application
@@ -9,34 +10,100 @@ const App = {
     async init() {
         console.log('🚀 Iniciando aplicação...');
 
+        // Check if user is already logged in
+        this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+        
         // Initialize sidebar
         this.initSidebar();
+        
+        // Initialize login
+        this.initLogin();
 
         // Initialize components
-        SearchBar.init();
-        ItemCard.init();
+        await InventoryPanel.init();
         Modal.init();
 
         // Check connection
         await this.checkConnection();
 
-        // Start auto-sync
-        this.startAutoSync();
+        console.log('Aplicacao iniciada com sucesso!');
+    },
 
-        // Load saved user name from localStorage
-        const savedName = localStorage.getItem('userName');
-        if (savedName) {
-            document.getElementById('userName').value = savedName;
-        }
+    /**
+     * Initialize login system
+     */
+    initLogin() {
+        const loginForm = document.getElementById('loginForm');
+        const logoutNavItem = document.getElementById('logoutNavItem');
 
-        // Save user name on change
-        document.getElementById('userName').addEventListener('blur', (e) => {
-            if (e.target.value.trim()) {
-                localStorage.setItem('userName', e.target.value.trim());
+        // Update UI based on login state
+        this.updateLoginUI();
+
+        // Login form handler
+        loginForm?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+
+            if (!username || !password) {
+                this.showToast('Preencha usuario e senha', 'error');
+                return;
+            }
+
+            // Simple auth (for now - later integrate with backend)
+            if (username === 'admin' && password === 'admin') {
+                this.login();
+                this.showToast('Login realizado com sucesso!', 'success');
+                loginForm.reset();
+                this.navigateTo('home');
+            } else {
+                this.showToast('Usuario ou senha incorretos', 'error');
             }
         });
 
-        console.log('✅ Aplicação iniciada com sucesso!');
+        // Logout handler
+        logoutNavItem?.addEventListener('click', () => {
+            this.logout();
+        });
+    },
+
+    /**
+     * Perform login
+     */
+    login() {
+        this.isLoggedIn = true;
+        localStorage.setItem('isLoggedIn', 'true');
+        this.updateLoginUI();
+    },
+
+    /**
+     * Perform logout
+     */
+    logout() {
+        this.isLoggedIn = false;
+        localStorage.removeItem('isLoggedIn');
+        this.updateLoginUI();
+        this.showToast('👋 Logout realizado com sucesso', 'info');
+        this.navigateTo('home');
+    },
+
+    /**
+     * Update UI based on login state
+     */
+    updateLoginUI() {
+        const loginNavItem = document.getElementById('loginNavItem');
+        const adminItems = document.querySelectorAll('.admin-only');
+
+        if (this.isLoggedIn) {
+            // Hide login, show admin menu
+            loginNavItem?.classList.add('hidden');
+            adminItems.forEach(item => item.classList.add('visible'));
+        } else {
+            // Show login, hide admin menu
+            loginNavItem?.classList.remove('hidden');
+            adminItems.forEach(item => item.classList.remove('visible'));
+        }
     },
 
     /**
@@ -78,8 +145,6 @@ const App = {
             });
         });
 
-        // Set home as active by default
-        navItems[0]?.classList.add('active');
     },
 
     /**
@@ -88,33 +153,48 @@ const App = {
     navigateTo(page) {
         this.currentPage = page;
         
-        // Hide all sections first
-        document.getElementById('quickStats')?.classList.add('hidden');
+        // Hide all pages
+        const pages = document.querySelectorAll('.page-content');
+        pages.forEach(p => p.classList.add('hidden'));
+        
+        // Update page title
+        const pageTitle = document.getElementById('pageTitle');
         
         switch(page) {
             case 'home':
-                // Show main functionality (always visible)
+                document.getElementById('homePage')?.classList.remove('hidden');
+                pageTitle.textContent = 'Retirada / Devolução';
                 break;
                 
-            case 'dashboard':
-                this.showToast('Dashboard em desenvolvimento', 'info');
-                document.getElementById('quickStats')?.classList.remove('hidden');
+            case 'login':
+                document.getElementById('loginPage')?.classList.remove('hidden');
+                pageTitle.textContent = 'Login';
                 break;
                 
-            case 'items':
-                this.showToast('Gerenciamento de itens em desenvolvimento', 'info');
+            case 'logout':
+                this.logout();
                 break;
                 
-            case 'reports':
-                this.showToast('Relatórios em desenvolvimento', 'info');
-                break;
-                
-            case 'history':
-                Modal.open();
+            case 'manage':
+                if (!this.isLoggedIn) {
+                    this.showToast('Faca login para acessar', 'error');
+                    this.navigateTo('login');
+                    return;
+                }
+                document.getElementById('managePage')?.classList.remove('hidden');
+                pageTitle.textContent = 'Gerenciar Itens';
+                this.showToast('Funcionalidade em desenvolvimento', 'info');
                 break;
                 
             case 'settings':
-                this.showToast('Configurações em desenvolvimento', 'info');
+                if (!this.isLoggedIn) {
+                    this.showToast('Faca login para acessar', 'error');
+                    this.navigateTo('login');
+                    return;
+                }
+                document.getElementById('settingsPage')?.classList.remove('hidden');
+                pageTitle.textContent = 'Configuracoes';
+                this.loadItemsCount();
                 break;
         }
     },
@@ -123,44 +203,125 @@ const App = {
      * Check connection with backend
      */
     async checkConnection() {
-        const isOnline = await API.checkConnection();
-        const statusIndicator = document.getElementById('syncStatus');
-        const statusText = document.getElementById('syncText');
-
-        if (isOnline) {
-            statusIndicator.className = 'status-indicator status-online';
-            statusText.textContent = 'Online';
-        } else {
-            statusIndicator.className = 'status-indicator status-offline';
-            statusText.textContent = 'Offline';
-        }
-
-        return isOnline;
+        return await API.checkConnection();
     },
 
     /**
      * Start automatic synchronization with Google Sheets
      */
     startAutoSync() {
-        // Initial sync
-        this.syncWithSheets();
-
-        // Periodic sync
-        this.syncInterval = setInterval(() => {
-            this.syncWithSheets();
-        }, CONFIG.SYNC_INTERVAL);
+        // Don't auto-sync for now, only manual sync
+        console.log('Auto-sync disabled. Use manual sync from settings.');
     },
 
     /**
      * Sync data with Google Sheets
      */
-    async syncWithSheets() {
+    async syncWithSheets(manual = false) {
         try {
-            await API.syncWithSheets();
-            console.log('✅ Sincronização concluída');
-            await this.checkConnection();
+            if (manual) {
+                this.showToast('Sincronizando...', 'info');
+            }
+            
+            const result = await API.syncWithSheets();
+            console.log('Sincronizacao concluida:', result);
+            
+            if (manual && result.success) {
+                this.showToast(
+                    `${result.itens_unicos || 0} itens sincronizados! ` +
+                    `(${result.items_novos || 0} novos, ${result.items_atualizados || 0} atualizados)`,
+                    'success'
+                );
+            }
         } catch (error) {
-            console.error('❌ Erro na sincronização:', error);
+            console.error('Erro na sincronizacao:', error);
+            if (manual) {
+                this.showToast('Erro na sincronizacao: ' + error.message, 'error');
+            }
+        }
+    },
+
+    /**
+     * Load items count for settings page
+     */
+    async loadItemsCount() {
+        try {
+            const items = await API.getAllItems();
+            const totalItemsEl = document.getElementById('totalItems');
+            if (totalItemsEl) {
+                totalItemsEl.textContent = items.length;
+            }
+            
+            // Setup sync button
+            const btnSync = document.getElementById('btnSync');
+            btnSync?.addEventListener('click', async () => {
+                await this.syncWithSheets(true);
+                await InventoryPanel.loadItems();
+            });
+            
+            // Load Slack settings
+            await this.loadSlackSettings();
+            
+            // Setup save Slack button
+            const btnSaveSlack = document.getElementById('btnSaveSlack');
+            btnSaveSlack?.addEventListener('click', async () => {
+                await this.saveSlackSettings();
+            });
+        } catch (error) {
+            console.error('Error loading items count:', error);
+        }
+    },
+
+    /**
+     * Load Slack settings
+     */
+    async loadSlackSettings() {
+        try {
+            const settings = await API.getSlackSettings();
+            
+            // Update UI
+            const slackChannel = document.getElementById('slackChannel');
+            const slackEnabled = document.getElementById('slackEnabled');
+            const slackStatus = document.getElementById('slackStatus');
+            
+            if (slackChannel) slackChannel.value = settings.channel || 'C09DV1KQS4C';
+            if (slackEnabled) slackEnabled.checked = settings.enabled !== false;
+            
+            // Update status
+            if (slackStatus) {
+                if (settings.configured) {
+                    slackStatus.innerHTML = '<span style="color: var(--color-success);">✓ Configurado</span>';
+                } else {
+                    slackStatus.innerHTML = '<span style="color: var(--color-error);">✕ Não configurado</span>';
+                }
+            }
+        } catch (error) {
+            console.error('Error loading Slack settings:', error);
+        }
+    },
+
+    /**
+     * Save Slack settings
+     */
+    async saveSlackSettings() {
+        try {
+            const slackEnabled = document.getElementById('slackEnabled');
+            
+            const settings = {
+                enabled: slackEnabled?.checked || false
+            };
+            
+            const result = await API.saveSlackSettings(settings);
+            
+            if (result.success) {
+                this.showToast('Configuracoes do Slack salvas!', 'success');
+                await this.loadSlackSettings();
+            } else {
+                this.showToast('Erro ao salvar configuracoes', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving Slack settings:', error);
+            this.showToast('Erro ao salvar: ' + error.message, 'error');
         }
     },
 
@@ -168,28 +329,37 @@ const App = {
      * Show loading overlay
      */
     showLoading(show) {
-        const overlay = document.getElementById('loadingOverlay');
+        // For now, just log. Can add a loading overlay later if needed.
         if (show) {
-            overlay.classList.remove('hidden');
+            console.log('Loading...');
         } else {
-            overlay.classList.add('hidden');
+            console.log('Loading complete');
         }
     },
 
     /**
      * Show toast notification
      */
-    showToast(message, type = 'info') {
-        const toast = document.getElementById('toast');
-        const toastMessage = document.getElementById('toastMessage');
-
-        toastMessage.textContent = message;
-        toast.className = `toast ${type}`;
-        toast.classList.remove('hidden');
-
-        // Auto hide after duration
+    showToast(message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        
+        const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+        
+        toast.innerHTML = `
+            <span class="toast-icon">${icon}</span>
+            <span class="toast-message">${message}</span>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Auto remove after duration
         setTimeout(() => {
-            toast.classList.add('hidden');
+            toast.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
         }, CONFIG.TOAST_DURATION);
     }
 };

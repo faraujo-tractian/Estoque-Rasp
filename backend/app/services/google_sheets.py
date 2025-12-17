@@ -48,56 +48,171 @@ class GoogleSheetsService:
         self.spreadsheet = self.client.open_by_key(self.spreadsheet_id)
     
     async def sync_from_sheets(self):
-        """Sync items from Google Sheets to local database"""
+        """
+        Sync items from Google Sheets to local database
+        Agrega itens por nome (5S individual → estoque consolidado)
+        """
         try:
             self.connect()
             
-            # Get ITENS worksheet
-            try:
-                items_sheet = self.spreadsheet.worksheet("ITENS")
-            except gspread.WorksheetNotFound:
-                items_sheet = self.spreadsheet.sheet1  # Fallback to first sheet
+            all_items = []
+            total_records = 0
             
-            # Get all records (assumes header row)
-            records = items_sheet.get_all_records()
+            # Ler todas as 3 abas
+            for aba_nome in ["Produto", "Mecânica", "Eletrônica"]:
+                try:
+                    sheet = self.spreadsheet.worksheet(aba_nome)
+                    records = sheet.get_all_records()
+                    
+                    for record in records:
+                        # Pegar nome do item (pode variar o nome da coluna)
+                        nome = (record.get('Nome_do_Recurso') or 
+                               record.get('Nome') or 
+                               record.get('Item') or 
+                               record.get('nome'))
+                        
+                        if not nome or str(nome).strip() == '':
+                            continue  # Pula linhas vazias
+                        
+                        all_items.append({
+                            'nome': str(nome).strip(),
+                            'codigo': record.get('ID_do_Recurso') or record.get('ID'),
+                            'categoria': record.get('Categoria'),
+                            'localizacao': record.get('Localizacao_de_armazenamento') or record.get('Localização'),
+                            'aba_origem': aba_nome
+                        })
+                        total_records += 1
+                    
+                    print(f"Lidos {len(records)} registros da aba '{aba_nome}'")
+                    
+                except gspread.WorksheetNotFound:
+                    print(f"Aba '{aba_nome}' nao encontrada, pulando...")
+                    continue
             
-            # Sync each item
-            for record in records:
-                item = Item(
-                    id=record.get('ID'),
-                    nome=record.get('Item') or record.get('Nome') or record.get('item'),
-                    categoria=record.get('Categoria') or record.get('categoria'),
-                    quantidade_disponivel=int(record.get('Qtd_Disponível') or record.get('Quantidade') or 0),
-                    estoque_minimo=int(record.get('Estoque_Mínimo') or record.get('Minimo') or 0),
-                    localizacao=record.get('Localização') or record.get('Localizacao')
-                )
+            if not all_items:
+                print("Nenhum item encontrado nas planilhas")
+                return {"success": False, "error": "Nenhum item encontrado"}
+            
+            # Agrupar itens por (nome, aba_origem)
+            # Importante: um item pode aparecer em várias abas!
+            items_agrupados = {}
+            for item in all_items:
+                nome = item['nome']
+                aba = item['aba_origem']
+                chave = f"{nome}|{aba}"  # Chave única: nome + aba
+                if chave not in items_agrupados:
+                    items_agrupados[chave] = []
+                items_agrupados[chave].append(item)
+            
+            # Sincronizar itens agrupados
+            items_novos = 0
+            items_atualizados = 0
+            
+            for chave, grupo in items_agrupados.items():
+                # Extrair nome e aba da chave
+                nome_chave, aba_origem = chave.split('|')
                 
-                if item.nome:  # Only sync if item has a name
-                    self.db.upsert_item(item)
+                quantidade_total = len(grupo)
+                codigos = [item['codigo'] for item in grupo if item.get('codigo')]
+                
+                # Pega dados do primeiro (todos deveriam ter mesmos dados)
+                primeiro = grupo[0]
+                nome = primeiro.get('nome')  # Nome real do item (sem a chave)
+                categoria = primeiro.get('categoria')
+                localizacao = primeiro.get('localizacao')
+                
+                # DEBUG: Log para os primeiros itens
+                if items_novos + items_atualizados < 3:
+                    print(f"DEBUG: Item '{nome}' -> aba_origem='{aba_origem}' (grupo de {len(grupo)} unidades)")
+                
+                # Busca item existente no banco (considerando nome E aba)
+                item_existente = self.db.get_item_by_name_and_aba(nome, aba_origem)
+                
+                if item_existente:
+                    # Verifica se quantidade mudou (itens novos adicionados)
+                    if item_existente['quantidade_total'] != quantidade_total:
+                        diferenca = quantidade_total - item_existente['quantidade_total']
+                        
+                        # Atualiza quantidades
+                        item_data = {
+                            'nome': nome,
+                            'categoria': categoria,
+                            'localizacao': localizacao,
+                            'quantidade_total': quantidade_total,
+                            'quantidade_disponivel': item_existente['quantidade_disponivel'] + diferenca,
+                            'quantidade_em_uso': item_existente['quantidade_em_uso'],
+                            'estoque_minimo': item_existente.get('estoque_minimo', 2),
+                            'codigos_originais': ','.join(codigos),
+                            'aba_origem': aba_origem
+                        }
+                        
+                        self.db.upsert_item(item_data)
+                        items_atualizados += 1
+                        
+                        if diferenca > 0:
+                            print(f"+{diferenca} unidade(s) de '{nome}'")
+                    else:
+                        # Atualiza metadados mesmo sem mudança de quantidade
+                        # (importante para corrigir aba_origem)
+                        if item_existente.get('aba_origem') != aba_origem:
+                            item_data = {
+                                'nome': nome,
+                                'categoria': categoria,
+                                'localizacao': localizacao,
+                                'quantidade_total': quantidade_total,
+                                'quantidade_disponivel': item_existente['quantidade_disponivel'],
+                                'quantidade_em_uso': item_existente['quantidade_em_uso'],
+                                'estoque_minimo': item_existente.get('estoque_minimo', 2),
+                                'codigos_originais': ','.join(codigos),
+                                'aba_origem': aba_origem
+                            }
+                            self.db.upsert_item(item_data)
+                            items_atualizados += 1
+                            print(f"Atualizado setor de '{nome}': {item_existente.get('aba_origem')} -> {aba_origem}")
+                else:
+                    # Criar novo item
+                    item_data = {
+                        'nome': nome,
+                        'categoria': categoria,
+                        'localizacao': localizacao,
+                        'quantidade_total': quantidade_total,
+                        'quantidade_disponivel': quantidade_total,  # Tudo disponível inicialmente
+                        'quantidade_em_uso': 0,
+                        'estoque_minimo': max(2, int(quantidade_total * 0.2)),  # 20% ou mínimo 2
+                        'codigos_originais': ','.join(codigos),
+                        'aba_origem': aba_origem
+                    }
+                    
+                    self.db.upsert_item(item_data)
+                    items_novos += 1
+                    print(f"Novo item: '{nome}' ({quantidade_total} unidades)")
             
-            print(f"✅ Sincronizados {len(records)} itens do Google Sheets")
-            return {"success": True, "items_synced": len(records)}
+            resultado = {
+                "success": True,
+                "registros_lidos": total_records,
+                "itens_unicos": len(items_agrupados),
+                "items_novos": items_novos,
+                "items_atualizados": items_atualizados
+            }
+            
+            print(f"Sincronizacao concluida:")
+            print(f"   - {total_records} registros lidos")
+            print(f"   - {len(items_agrupados)} itens unicos")
+            print(f"   - {items_novos} novos | {items_atualizados} atualizados")
+            
+            return resultado
             
         except Exception as e:
-            print(f"❌ Erro ao sincronizar com Google Sheets: {e}")
+            print(f"Erro ao sincronizar com Google Sheets: {e}")
+            import traceback
+            traceback.print_exc()
             raise
     
     async def update_item_quantity(self, item_name: str, new_quantity: int):
-        """Update item quantity in Google Sheets"""
-        try:
-            self.connect()
-            
-            items_sheet = self.spreadsheet.worksheet("ITENS")
-            
-            # Find the item row
-            cell = items_sheet.find(item_name)
-            if cell:
-                # Update the quantity column (assuming it's in column D or similar)
-                # You may need to adjust the column based on your sheet structure
-                items_sheet.update_cell(cell.row, 4, new_quantity)  # Column 4 = D
-                
-        except Exception as e:
-            print(f"⚠️  Erro ao atualizar quantidade no Sheets: {e}")
+        """Update item quantity in Google Sheets (DISABLED - local DB only)"""
+        # Não atualizamos o Google Sheets, apenas lemos dele
+        # O controle de quantidade fica no banco local
+        pass
     
     async def append_to_history(self, transaction: Dict[str, Any]):
         """Append transaction to HISTÓRICO worksheet"""
@@ -155,10 +270,11 @@ class GoogleSheetsService:
                 return mapping
                 
             except gspread.WorksheetNotFound:
-                print("⚠️  Worksheet PESSOAS não encontrada")
+                # Silenciosamente retorna vazio se não encontrar
+                # (não é crítico para o funcionamento)
                 return {}
                 
         except Exception as e:
-            print(f"⚠️  Erro ao buscar mapeamento de usuários: {e}")
+            # Silenciosamente retorna vazio em caso de erro
             return {}
 

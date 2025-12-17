@@ -14,7 +14,7 @@ import sys
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.routes import items, transactions
+from app.routes import items, transactions, settings as settings_routes
 from app.services.database import Database
 from app.services.google_sheets import GoogleSheetsService
 from app.config import settings
@@ -24,26 +24,29 @@ from app.config import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print("🚀 Iniciando aplicação...")
+    print("Iniciando aplicacao...")
     
     # Initialize database
     db = Database()
     db.init_db()
-    print("✅ Banco de dados inicializado")
+    print("Banco de dados inicializado")
     
-    # Initial sync with Google Sheets (comentado para teste local)
-    # try:
-    #     sheets_service = GoogleSheetsService()
-    #     await sheets_service.sync_from_sheets()
-    #     print("✅ Sincronização inicial com Google Sheets concluída")
-    # except Exception as e:
-    #     print(f"⚠️  Erro na sincronização inicial: {e}")
-    print("⚠️  Sincronização com Google Sheets desabilitada (modo teste)")
+    # Initial sync with Google Sheets
+    try:
+        print("Iniciando sincronizacao com Google Sheets...")
+        sheets_service = GoogleSheetsService()
+        result = await sheets_service.sync_from_sheets()
+        print(f"Sincronizacao inicial concluida: {result}")
+    except Exception as e:
+        print(f"Erro na sincronizacao inicial: {e}")
+        print("   Sistema continuara funcionando com dados locais")
+        import traceback
+        traceback.print_exc()
     
     yield
     
     # Shutdown
-    print("👋 Encerrando aplicação...")
+    print("Encerrando aplicacao...")
 
 
 # Create FastAPI app
@@ -66,6 +69,7 @@ app.add_middleware(
 # Include routers
 app.include_router(items.router, prefix="/api", tags=["Items"])
 app.include_router(transactions.router, prefix="/api", tags=["Transactions"])
+app.include_router(settings_routes.router, prefix="/api", tags=["Settings"])
 
 # Mount static files (frontend)
 frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")

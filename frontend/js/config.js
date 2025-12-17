@@ -18,7 +18,8 @@ const CONFIG = {
         SEARCH: '/items/search',
         TRANSACTION: '/transactions',
         HISTORY: '/history',
-        SYNC: '/sync'
+        SYNC: '/sync',
+        SLACK_SETTINGS: '/settings/slack'
     }
 };
 

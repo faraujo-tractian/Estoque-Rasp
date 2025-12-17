@@ -29,15 +29,29 @@ const ItemCard = {
     display(item) {
         this.selectedItem = item;
         const isLowStock = item.quantidade_disponivel <= item.estoque_minimo;
+        const totalItems = item.quantidade_total || item.quantidade_disponivel;
+        const emUso = item.quantidade_em_uso || 0;
 
         this.card.innerHTML = `
             <div class="item-name">${item.nome}</div>
             ${item.categoria ? `<div class="item-category">📂 ${item.categoria}</div>` : ''}
             <div class="item-info">
                 <div class="item-info-item">
+                    <span class="item-info-label">Total</span>
+                    <span class="item-info-value">
+                        ${totalItems} un
+                    </span>
+                </div>
+                <div class="item-info-item">
                     <span class="item-info-label">Disponível</span>
                     <span class="item-info-value ${isLowStock ? 'low-stock' : ''}">
                         ${item.quantidade_disponivel} un
+                    </span>
+                </div>
+                <div class="item-info-item">
+                    <span class="item-info-label">Em Uso</span>
+                    <span class="item-info-value" style="color: var(--color-warning);">
+                        ${emUso} un
                     </span>
                 </div>
                 <div class="item-info-item">

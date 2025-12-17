@@ -87,6 +87,23 @@ const API = {
         } catch (error) {
             return false;
         }
+    },
+
+    /**
+     * Get Slack settings
+     */
+    async getSlackSettings() {
+        return this.request(CONFIG.ENDPOINTS.SLACK_SETTINGS);
+    },
+
+    /**
+     * Save Slack settings
+     */
+    async saveSlackSettings(settings) {
+        return this.request(CONFIG.ENDPOINTS.SLACK_SETTINGS, {
+            method: 'POST',
+            body: JSON.stringify(settings),
+        });
     }
 };
 

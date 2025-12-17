@@ -33,9 +33,11 @@ async def get_item(item_id: int):
 
 
 @router.get("/items/search", response_model=List[Item])
-async def search_items(q: str = Query(..., min_length=2)):
+async def search_items(q: str = Query(None, min_length=1)):
     """Search items by name"""
     try:
+        if not q or len(q.strip()) < 2:
+            return []
         items = db.search_items(q)
         return items
     except Exception as e:
