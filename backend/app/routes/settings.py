@@ -74,3 +74,4 @@ async def save_slack_settings(slack_settings: SlackSettings):
             detail=f"Erro ao salvar configuracoes: {str(e)}"
         )
 
+
